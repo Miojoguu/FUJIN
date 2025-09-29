@@ -13,7 +13,7 @@
 
 #### Epic 1: Tela Inicial e Autenticação
 - Criar tela inicial do app (Android)  
-- Implementar cadastro/login (e-mail + Google)  
+- Implementar cadastro/login (e-mail + X)  
 - Criar perfil do usuário  
 
 #### Epic 2: Configurações do Usuário
