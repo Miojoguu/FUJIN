@@ -3,17 +3,176 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
+
+// --- Enums para UserPreference ---
+enum TemperatureUnit {
+  C
+  F
+}
+
+enum SpeedUnit {
+  kph
+  mph
+}
+
+enum HourFormat {
+  h12 // "12h"
+  h24 // "24h"
+}
+
+// --- Modelos de Usuário ---
 
 model User {
   id           String  @id @default(uuid())
-  email        String?  @unique
+  email        String  @unique
   name         String?
   passwordHash String? @map("password_hash")
   provider     String  @default("local")
   providerId   String? @map("provider_id")
+  
+  pushToken    String? @unique // <-- ADICIONE ESTA LINHA
+
+  preferences UserPreference?
+  locations   UserLocation[]
+  alerts      UserAlert[]
 
   @@unique([provider, providerId])
+}
+
+model UserPreference {
+  id             String          @id @default(uuid())
+  userId         String          @unique
+  unitTemp       TemperatureUnit @default(C)
+  unitSpeed      SpeedUnit       @default(mph)
+  hourFormat     HourFormat      @default(h24)
+  simplifiedMode Boolean         @default(false)
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model UserLocation {
+  id     String  @id @default(uuid())
+  userId String
+  name   String? // Ex: "Casa", "Trabalho"
+
+  // [MUDANÇA 2: String -> Float]
+  latitude  Float
+  longitude Float
+
+  user        User          @relation(fields: [userId], references: [id])
+  weatherData WeatherData[]
+  alerts      UserAlert[]
+}
+
+// --- Modelos de Dados Meteorológicos (Cache da API) ---
+
+model WeatherData {
+  id         String   @id @default(uuid())
+  locationId String
+  timestamp  DateTime @default(now())
+
+  // [MUDANÇA 3: String? -> Float?/Int?]
+  temperature   Float?
+  feelsLike     Float?
+  humidity      Int?
+  windSpeed     Float?
+  windDirection String? // (Ex: "S")
+  rainProb      Float? // (precip_mm da API)
+  uvIndex       Float?
+  pressure      Float?
+  dewPoint      Float?
+
+  // [MUDANÇA 4: Relação para AirQuality]
+  airQuality AirQuality?
+
+  location  UserLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  forecasts Forecast[]
+}
+
+// [MUDANÇA 5: Novo Modelo para AirQuality]
+model AirQuality {
+  id            String @id @default(uuid())
+  weatherDataId String @unique
+  co            Float?
+  no2           Float?
+  o3            Float?
+  so2           Float?
+  pm2_5         Float?
+  pm10          Float?
+  usEpaIndex    Int?
+
+  weatherData WeatherData @relation(fields: [weatherDataId], references: [id], onDelete: Cascade)
+}
+
+model Forecast {
+  id            String   @id @default(uuid())
+  weatherDataId String
+  date          DateTime // Data da previsão
+
+  // [MUDANÇA 6: String? -> Float?/Int?]
+  minTemp   Float?
+  maxTemp   Float?
+  rainProb  Float? // (daily_chance_of_rain)
+  humidity  Int?
+  uvIndex   Float?
+  sunrise   String? // (Ex: "05:20 AM")
+  sunset    String?
+  moonPhase String? // (Ex: "First Quarter")
+
+  weatherData WeatherData @relation(fields: [weatherDataId], references: [id], onDelete: Cascade)
+
+  // [MUDANÇA 7: Novo Modelo para dados horários]
+  hourlyData HourlyForecast[]
+}
+
+// [MUDANÇA 8: Novo Modelo para HourlyForecast]
+model HourlyForecast {
+  id         String   @id @default(uuid())
+  forecastId String // Relação com o dia da previsão
+  time       DateTime // (time_epoch)
+
+  temp      Float?
+  windSpeed Float?
+  humidity  Int?
+  rainProb  Int? // (chance_of_rain)
+  condition String? // (condition.text)
+  iconUrl   String?
+
+  forecast Forecast @relation(fields: [forecastId], references: [id], onDelete: Cascade)
+}
+
+// --- Modelos de Alertas ---
+
+enum AlertOperator {
+  GT // ">"
+  LT // "<"
+  GTE // ">="
+  LTE // "<="
+  EQ // "="
+}
+
+model UserAlert {
+  id         String        @id @default(uuid())
+  userId     String
+  locationId String
+  type       String
+  threshold  Float
+  operator   AlertOperator
+  timeOfDay  String?
+
+  user     User         @relation(fields: [userId], references: [id])
+  location UserLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
+
+model OfficialAlert {
+  id          String   @id @default(uuid())
+  regionCode  String
+  title       String
+  description String
+  severity    String
+  startTime   DateTime
+  endTime     DateTime
 }

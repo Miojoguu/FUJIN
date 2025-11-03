@@ -13,8 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "";
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID!;
 const TWITTER_CALLBACK_URL = process.env.TWITTER_CALLBACK_URL!;
 
-
-// LOGIN EMAIL 
+// LOGIN EMAIL
 export const loginUser = async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
@@ -41,8 +40,9 @@ export const loginUser = async (req: Request, res: Response) => {
   }
 };
 
-// LOGIN TWITTER 
+// LOGIN TWITTER
 export const loginWithX = async (req: Request, res: Response) => {
+  console.log("Chegou aqui");
   const { code, codeVerifier } = req.body;
 
   if (!code || !codeVerifier) {
@@ -52,7 +52,6 @@ export const loginWithX = async (req: Request, res: Response) => {
   }
 
   try {
-    
     const tokenResponse = await axios.post<TwitterTokenResponse>(
       "https://api.twitter.com/2/oauth2/token",
       new URLSearchParams({
@@ -72,7 +71,6 @@ export const loginWithX = async (req: Request, res: Response) => {
         .json({ error: "Falha ao obter access_token do Twitter" });
     }
 
-    
     const userResponse = await axios.get<TwitterUserResponse>(
       "https://api.twitter.com/2/users/me",
       { headers: { Authorization: `Bearer ${access_token}` } }
@@ -80,24 +78,21 @@ export const loginWithX = async (req: Request, res: Response) => {
 
     const { id: providerId, name } = userResponse.data.data;
 
-    
     let user = await prisma.user.findUnique({
       where: { provider_providerId: { provider: "twitter", providerId } },
     });
 
-    
     if (!user) {
       user = await prisma.user.create({
         data: {
           provider: "twitter",
           providerId,
           name,
-          email: null, 
+          email: "",
         },
       });
     }
 
-    
     const token = jwt.sign(
       { id: user.id, provider: user.provider },
       JWT_SECRET,
@@ -109,6 +104,5 @@ export const loginWithX = async (req: Request, res: Response) => {
     res.json({ message: "Login via X realizado com sucesso", token, user });
   } catch (err: any) {
     console.error(err.response?.data || err.message);
-
   }
 };

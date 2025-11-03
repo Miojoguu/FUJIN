@@ -1,16 +1,18 @@
-import express from "express";
-import bodyParser from "body-parser";
-import userRoutes from "./routes/userRoutes";
-import apiRoutes from "./routes/apiRoutes";
-import loginRoutes from "./routes/loginRoutes"
+// src/server.ts
 
-const app = express();
+import app from "./index"; // [MUDANÇA] Importe de './index' (não './index.tsx')
 
-app.use(bodyParser.json());
+// [NOVO] Importe os serviços de cron aqui
+import { startCacheRefreshService } from "./services/cacheRefreshService";
+import { startAlertService } from "./services/alertService";
 
+const PORT = 3000;
 
-app.use("/api", apiRoutes);
-app.use("/users", userRoutes);
-app.use("/auth", loginRoutes);
-
-export default app;
+app.listen(PORT, () => {
+  console.log(`Servidor rodando em http://localhost:${PORT}`);
+  console.log(
+    `Documentação Swagger disponível em http://localhost:${PORT}/api-docs`
+  );
+  startCacheRefreshService();
+  startAlertService();
+});

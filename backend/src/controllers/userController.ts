@@ -66,3 +66,31 @@ export const deleteUser = async (req: Request, res: Response) => {
     res.status(400).json({ error: err.message });
   }
 };
+
+export const updateUserPushToken = async (req: Request, res: Response) => {
+  const { id: userId } = req.params;
+  const { pushToken } = req.body;
+
+  if (!pushToken || typeof pushToken !== "string") {
+    return res.status(400).json({ error: "pushToken (string) is required" });
+  }
+
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        pushToken: pushToken, // Salva o novo token no banco
+      },
+    });
+
+    res.json({
+      message: "Push token updated successfully",
+      userId: updatedUser.id,
+    });
+  } catch (err: any) {
+    // Pega erro se o ID do usuário não for encontrado
+    // ou se o pushToken já estiver em uso (Unique constraint)
+    console.error("Erro ao salvar push token:", err.message);
+    res.status(400).json({ error: err.message });
+  }
+};
