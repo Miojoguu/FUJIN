@@ -41,12 +41,9 @@ yarn-error.*
 /android
 
 # Ignorar credenciais do Google/Firebase
-google-services.json
 GoogleService-Info.plist
 *.keystore
 *.jks
 credentials.json
 
 # Variáveis de ambiente
-.env
-.env.local

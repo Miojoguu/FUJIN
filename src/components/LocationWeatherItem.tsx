@@ -1,4 +1,3 @@
-// src/components/LocationWeatherItem.tsx
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -9,37 +8,41 @@ import {
   ActivityIndicator,
 } from "react-native";
 import api from "../services/api";
+import { useWeatherCache } from "../hooks/useWeatherCache";
 
-// Tipagem do local que o Drawer nos envia
 interface LocationProps {
-  id: string; // Este é o locationId
+  id: string;
   name: string;
   latitude: number;
   longitude: number;
   onPress: () => void;
-  onLongPress: () => void; // 1. Prop para o clique longo
+  onLongPress: () => void;
   isDrawerOpen: boolean;
   refreshToggle: boolean;
   userId: string;
 }
 
-// Tipagem para o estado do clima
 interface WeatherState {
   temp: string;
   icon: string;
   tempUnit: string;
 }
 
-// Função Helper para formatar os dados
 const formatWeatherData = (data: any): WeatherState => {
-  const iconUrl =
-    data.forecasts?.[0]?.hourlyData?.[0]?.iconUrl ||
-    "//cdn.weatherapi.com/weather/64x64/day/113.png";
+  let iconPath = data.current?.condition?.icon;
+
+  if (!iconPath) {
+    iconPath = "//cdn.weatherapi.com/weather/64x64/day/113.png";
+  }
+
+  const fullIconUrl = iconPath.startsWith("http")
+    ? iconPath
+    : `https:${iconPath}`;
 
   return {
-    temp: Math.round(data.current.temp).toString(),
-    icon: `https:${iconUrl}`,
-    tempUnit: data.current.tempUnit.toUpperCase(),
+    temp: Math.round(data.current?.temp || 0).toString(),
+    icon: fullIconUrl,
+    tempUnit: (data.current?.tempUnit || "C").toUpperCase(),
   };
 };
 
@@ -47,43 +50,34 @@ export const LocationWeatherItem: React.FC<LocationProps> = ({
   id,
   name,
   onPress,
-  onLongPress, // 2. Pega a prop
+  onLongPress,
   isDrawerOpen,
   refreshToggle,
   userId,
 }) => {
   const [weather, setWeather] = useState<WeatherState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { loadWeatherFromCache } = useWeatherCache();
 
-  // Este useEffect busca o clima para ESTE item
   useEffect(() => {
     const fetchWeather = async () => {
       setIsLoading(true);
       try {
-        // Tenta buscar o cache de clima existente
         const response = await api.get(`/locations/${id}/weather`, {
           params: { userId },
+          timeout: 5000,
         });
         setWeather(formatWeatherData(response.data));
       } catch (err: any) {
-        // FALHOU! Verifica se foi um 404 (Cache não existe)
-        if (err.response?.status === 404) {
-          console.log(`Cache não encontrado para ${name}. Criando um novo...`);
-          // O cache não existe. Tenta criar um novo.
-          try {
-            // Chama POST /locations/{id}/refresh
-            const refreshResponse = await api.post(`/locations/${id}/refresh`);
-            setWeather(formatWeatherData(refreshResponse.data));
-          } catch (refreshError) {
-            console.error(
-              `Falha ao TENTAR ATUALIZAR cache para ${name}:`,
-              refreshError
-            );
-            setWeather(null); // Falha final
-          }
+        const cachedData = await loadWeatherFromCache(id);
+
+        if (cachedData && cachedData.current) {
+          const simulatedData = {
+            current: cachedData.current,
+            forecasts: cachedData.forecast,
+          };
+          setWeather(formatWeatherData(simulatedData));
         } else {
-          // Foi outro erro (ex: 500)
-          console.error(`Falha ao buscar clima do item ${name}:`, err);
           setWeather(null);
         }
       } finally {
@@ -91,19 +85,17 @@ export const LocationWeatherItem: React.FC<LocationProps> = ({
       }
     };
 
-    // Só executa se o menu estiver aberto
     if (isDrawerOpen) {
       fetchWeather();
     }
   }, [id, name, isDrawerOpen, refreshToggle, userId]);
 
   return (
-    // 3. Adiciona onLongPress e delayLongPress
     <TouchableOpacity
       style={styles.locationItem}
       onPress={onPress}
       onLongPress={onLongPress}
-      delayLongPress={200} // Tempo em ms para ativar o long press
+      delayLongPress={200}
     >
       <Text style={styles.locationName} numberOfLines={1}>
         {name}
@@ -119,16 +111,12 @@ export const LocationWeatherItem: React.FC<LocationProps> = ({
             <Image source={{ uri: weather.icon }} style={styles.weatherIcon} />
           </>
         )}
-        {/* Mostra '--' se falhar */}
-        {!isLoading && !weather && (
-          <Text style={styles.locationTemp}>--° C</Text>
-        )}
+        {!isLoading && !weather && <Text style={styles.locationTemp}>--°</Text>}
       </View>
     </TouchableOpacity>
   );
 };
 
-// --- Estilos ---
 const styles = StyleSheet.create({
   locationItem: {
     flexDirection: "row",
@@ -158,7 +146,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   weatherIcon: {
-    width: 24,
-    height: 24,
+    width: 40,
+    height: 40,
   },
 });

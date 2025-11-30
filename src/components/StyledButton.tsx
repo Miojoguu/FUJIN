@@ -1,4 +1,3 @@
-// src/components/StyledButton.tsx
 import React from "react";
 import {
   TouchableOpacity,
@@ -13,17 +12,9 @@ interface Props extends TouchableOpacityProps {
   loading?: boolean;
 }
 
-export const StyledButton: React.FC<Props> = ({
-  title,
-  loading,
-  ...rest
-}) => {
+export const StyledButton: React.FC<Props> = ({ title, loading, ...rest }) => {
   return (
-    <TouchableOpacity
-      style={styles.button}
-      disabled={loading}
-      {...rest}
-    >
+    <TouchableOpacity style={styles.button} disabled={loading} {...rest}>
       {loading ? (
         <ActivityIndicator color="#fff" />
       ) : (
@@ -37,7 +28,7 @@ const styles = StyleSheet.create({
   button: {
     height: 50,
     width: "100%",
-    backgroundColor: "#3b82f6", // Azul da imagem
+    backgroundColor: "#3b82f6",
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",

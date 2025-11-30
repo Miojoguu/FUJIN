@@ -1,47 +1,62 @@
-// src/screens/HomeScreen.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ActivityIndicator,
   ScrollView,
-  SafeAreaView,
   Image,
   TouchableOpacity,
-  Modal,
+  Platform,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
-import { FontAwesome5, Ionicons } from "@expo/vector-icons";
+import { FontAwesome5, MaterialIcons, Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// 1. IMPORTA OS NOVOS TIPOS DE NAVEGAÇÃO
+import ViewShot from "react-native-view-shot";
+import * as Sharing from "expo-sharing";
+
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
-// 'DrawerScreenProps' é necessário para a tipagem composta
 import { DrawerScreenProps } from "@react-navigation/drawer";
 import {
   CompositeScreenProps,
   RouteProp,
   useNavigation,
   useRoute,
-  DrawerActions, // <-- MUDANÇA AQUI (importado de '@react-navigation/native')
+  DrawerActions,
+  useIsFocused,
 } from "@react-navigation/native";
 
 import { useAuth } from "../contexts/AuthContext";
-import { useWeather } from "../contexts/WeatherContext"; // Importa o contexto
+import { useWeather } from "../contexts/WeatherContext";
 import api from "../services/api";
-import { SearchModal } from "../components/SearchModal";
-// 2. IMPORTA OS NOVOS TIPOS DO index.tsx
-import {
-  AppDrawerParamList,
-  AppTabParamList,
-  UserLocation,
-} from "../navigation";
+import { useWeatherCache } from "../hooks/useWeatherCache";
 
-// --- Tipagem (sem mudança) ---
+import { SearchModal } from "../components/SearchModal";
+import { AdvancedInfo } from "../components/AdvancedInfo";
+import {
+  CustomizeDetailsModal,
+  VisibilityConfig,
+} from "../components/CustomizeDetailsModal";
+import { AppDrawerParamList, AppTabParamList } from "../navigation";
+
 interface WeatherCondition {
   text: string;
   icon: string;
 }
+
+interface AirQualityObject {
+  co: number;
+  no2: number;
+  o3: number;
+  so2: number;
+  pm2_5: number;
+  pm10: number;
+  "us-epa-index": number;
+  "gb-defra-index": number;
+}
+
 interface CurrentWeather {
   name: string;
   country: string;
@@ -52,36 +67,61 @@ interface CurrentWeather {
   condition: WeatherCondition;
   speedUnit: string;
   tempUnit: string;
-  sensacao_termica?: number;
   lat?: number;
   long?: number;
+  uv: number;
+  pressure_mb: number;
+  co: number;
+  wind_dir: string;
+  precip_mm?: number;
+  chance_of_rain?: number;
+  dewpoint: number;
+  air_quality_full?: AirQualityObject;
 }
+
+interface AstroData {
+  sunrise: string;
+  sunset: string;
+}
+
 interface ForecastDay {
   day_of_week: string;
   avgtemp: string;
   condition: WeatherCondition;
-  tempUnit: string;
+  astro?: AstroData;
 }
 
-// 3. ATUALIZA OS TIPOS DE NAVEGAÇÃO (para corrigir os erros)
 type HomeScreenRouteProp = RouteProp<AppTabParamList, "Home">;
-
 type HomeScreenNavigationProp = CompositeScreenProps<
   BottomTabScreenProps<AppTabParamList, "Home">,
   DrawerScreenProps<AppDrawerParamList, "MainTabs">
 >["navigation"];
 
-// --- Componente HomeScreen ---
+const DEFAULT_VISIBILITY: VisibilityConfig = {
+  wind: true,
+  rain: true,
+  dewPoint: true,
+  astro: true,
+  uv: true,
+  pressure: true,
+  co: true,
+  humidity: true,
+};
+
+const KEY_VISIBILITY = "@Fujin:AdvancedVisibility";
+
 export function HomeScreen() {
   const { user } = useAuth();
-  // 4. ATUALIZA OS HOOKS
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const route = useRoute<HomeScreenRouteProp>();
+  const isFocused = useIsFocused();
 
-  // 5. CORRIGE O ERRO DO CONTEXTO (como no arquivo que você me deu)
   const { setCurrentContext, homeScreenRefreshToggle } = useWeather();
+  const { saveWeatherToCache, loadWeatherFromCache } = useWeatherCache();
 
-  // --- (Estados da tela, sem mudança) ---
+  const viewShotRef = useRef<ViewShot>(null);
+  const [isSharing, setIsSharing] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [currentWeather, setCurrentWeather] = useState<CurrentWeather | null>(
@@ -94,133 +134,240 @@ export function HomeScreen() {
     null
   );
 
-  const drawerLocation = route.params?.location;
-  const drawerLocationId = drawerLocation?.id;
+  const [isOffline, setIsOffline] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<string | null>(null);
 
-  // --- Efeito Principal (Carregar Dados do Clima) ---
-  useEffect(() => {
-    if (drawerLocation) {
-      setOverrideDisplayName(null);
+  const [isSimplifiedMode, setIsSimplifiedMode] = useState(false);
+  const [customizeModalVisible, setCustomizeModalVisible] = useState(false);
+  const [advancedVisibility, setAdvancedVisibility] =
+    useState<VisibilityConfig>(DEFAULT_VISIBILITY);
+
+  const drawerLocation = route.params?.location;
+
+  const mainTitle =
+    overrideDisplayName || currentWeather?.name || "Localização";
+  const subTitle = drawerLocation?.name;
+
+  const handleShare = async () => {
+    if (!viewShotRef.current || !viewShotRef.current.capture) {
+      return;
     }
+
+    setIsSharing(true);
+
+    try {
+      const uri = await viewShotRef.current.capture();
+
+      if (!(await Sharing.isAvailableAsync())) {
+        alert("Compartilhamento indisponível neste dispositivo");
+        setIsSharing(false);
+        return;
+      }
+
+      await Sharing.shareAsync(uri, {
+        mimeType: "image/png",
+        dialogTitle: `Clima em ${mainTitle}`,
+        UTI: "public.png",
+      });
+    } catch (error) {
+      console.error("Erro ao compartilhar:", error);
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  useEffect(() => {
+    const loadVisibility = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(KEY_VISIBILITY);
+        if (saved) {
+          setAdvancedVisibility(JSON.parse(saved));
+        }
+      } catch (e) {
+        console.log("Erro ao carregar config visual", e);
+      }
+    };
+    loadVisibility();
+  }, []);
+
+  const handleSaveVisibility = async (newConfig: VisibilityConfig) => {
+    setAdvancedVisibility(newConfig);
+    await AsyncStorage.setItem(KEY_VISIBILITY, JSON.stringify(newConfig));
+  };
+
+  useEffect(() => {
+    if (user && isFocused) {
+      api
+        .get(`/users/${user.id}/preferences`)
+        .then((res) => {
+          setIsSimplifiedMode(!!res.data.simplifiedMode);
+        })
+        .catch((err) => console.log("Erro ao ler preferências:", err));
+    }
+  }, [user, isFocused, homeScreenRefreshToggle]);
+
+  useEffect(() => {
+    if (drawerLocation) setOverrideDisplayName(null);
+
     const fetchWeatherData = async () => {
       setLoading(true);
       setErrorMsg(null);
-      const userId = user?.id;
-      try {
-        let weatherResponse;
-        let forecastResponse;
-        let locationId: string | null = null;
-        let locationLat: number = 0;
-        let locationLon: number = 0;
+      setIsOffline(false);
 
+      const userId = user?.id;
+      let targetId: string | null = null;
+      let targetLat = 0;
+      let targetLong = 0;
+      let isGpsSearch = false;
+
+      try {
         if (drawerLocation) {
-          const { latitude, longitude, id } = drawerLocation; // Agora lê o 'id'
-          [weatherResponse, forecastResponse] = await Promise.all([
-            api.get("/api/weather/latlong", {
-              params: { lat: latitude, long: longitude, userId },
-            }),
-            api.get("/api/forecast/latlong", {
-              params: { lat: latitude, long: longitude, userId },
-            }),
-          ]);
-          locationId = id;
-          locationLat = latitude;
-          locationLon = longitude;
+          targetId = drawerLocation.id;
+          targetLat = drawerLocation.latitude;
+          targetLong = drawerLocation.longitude;
         } else if (selectedCityId) {
+          targetId = selectedCityId;
+        } else {
+          isGpsSearch = true;
+          try {
+            const { status } =
+              await Location.requestForegroundPermissionsAsync();
+            if (status === "granted") {
+              const loc = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+              });
+              targetLat = loc.coords.latitude;
+              targetLong = loc.coords.longitude;
+            } else {
+              setErrorMsg("Permissão de localização negada.");
+              setLoading(false);
+              return;
+            }
+          } catch (e) {
+            console.log("Erro GPS/Offline:", e);
+          }
+        }
+
+        let weatherResponse, forecastResponse;
+
+        if (targetId && !drawerLocation) {
+          weatherResponse = await api.get("/api/weather/data", {
+            params: { id: targetId, userId },
+          });
+          forecastResponse = await api.get("/api/forecast/data", {
+            params: { id: targetId, userId },
+          });
+          targetLat = weatherResponse.data.lat;
+          targetLong = weatherResponse.data.long;
+        } else {
+          const params = { lat: targetLat, long: targetLong, userId };
           [weatherResponse, forecastResponse] = await Promise.all([
-            api.get("/api/weather/data", {
-              params: { id: selectedCityId, userId },
-            }),
-            api.get("/api/forecast/data", {
-              params: { id: selectedCityId, userId },
-            }),
+            api.get("/api/weather/latlong", { params }),
+            api.get("/api/forecast/latlong", { params }),
           ]);
-          const weatherData: CurrentWeather = weatherResponse.data;
-          if (!weatherData.lat || !weatherData.long) {
-            console.warn(
-              "Backend não está enviando lat/lon na rota /api/weather/data"
-            );
-            locationId = null;
+        }
+
+        setCurrentContext(targetId, {
+          latitude: targetLat,
+          longitude: targetLong,
+        });
+
+        const raw = weatherResponse.data;
+        const formattedWeather: CurrentWeather = {
+          ...raw,
+          uv: raw.uv ?? 0,
+          pressure_mb: raw.pressure_mb ?? raw.pressure ?? 0,
+          co: raw.air_quality?.co ?? 0,
+          wind_dir: raw.wind_dir || raw.windDirection || "N/A",
+          dewpoint: raw.dewpoint ?? 0,
+          chance_of_rain: raw.chance_of_rain ?? raw.precip_mm ?? 0,
+          air_quality_full: raw.air_quality,
+        };
+
+        const forecastData = forecastResponse?.data || [];
+
+        setCurrentWeather(formattedWeather);
+        setForecast(forecastData);
+        setIsOffline(false);
+
+        await saveWeatherToCache(targetId, formattedWeather, forecastData, {
+          id: targetId,
+          lat: targetLat,
+          long: targetLong,
+          name: formattedWeather.name,
+        });
+      } catch (err) {
+        console.log(`⚠️ Falha API. Tentando Cache...`);
+        const cachedData = await loadWeatherFromCache(targetId);
+
+        if (cachedData) {
+          const { meta } = cachedData;
+          let isMatch = false;
+
+          if (targetId) {
+            if (meta.id === targetId) isMatch = true;
+          } else if (isGpsSearch) {
+            if (!meta.id) isMatch = true;
+          }
+
+          if (isMatch) {
+            setCurrentWeather(cachedData.current);
+            setForecast(cachedData.forecast);
+            setIsOffline(true);
+            setCurrentContext(meta.id, {
+              latitude: meta.lat,
+              longitude: meta.long,
+            });
+            if (cachedData.timestamp) {
+              const date = new Date(cachedData.timestamp);
+              setLastUpdate(
+                date.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              );
+            }
           } else {
-            locationId = null;
-            locationLat = weatherData.lat;
-            locationLon = weatherData.long;
+            setErrorMsg(
+              targetId ? "Sem conexão para este local." : "Sem conexão GPS."
+            );
+            setCurrentWeather(null);
           }
         } else {
-          let { status } = await Location.requestForegroundPermissionsAsync();
-          if (status !== "granted") {
-            setErrorMsg("Permissão de localização negada.");
-            setLoading(false);
-            return;
-          }
-          let location = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          const { latitude, longitude } = location.coords;
-          [weatherResponse, forecastResponse] = await Promise.all([
-            api.get("/api/weather/latlong", {
-              params: { lat: latitude, long: longitude, userId },
-            }),
-            api.get("/api/forecast/latlong", {
-              params: { lat: latitude, long: longitude, userId },
-            }),
-          ]);
-          locationId = null;
-          locationLat = weatherResponse.data.lat;
-          locationLon = weatherResponse.data.long;
+          if (!currentWeather) setErrorMsg("Sem conexão.");
         }
-
-        if (locationLat && locationLon) {
-          // 6. CORRIGE A CHAMADA DO CONTEXTO
-          setCurrentContext(locationId, {
-            latitude: locationLat,
-            longitude: locationLon,
-          });
-        }
-        const currentData = weatherResponse.data;
-        currentData.sensacao_termica = currentData.feelslike;
-        currentData.velo_vento = currentData.wind;
-        setCurrentWeather(currentData);
-        setForecast(forecastResponse.data);
-      } catch (err) {
-        console.error(err);
-        setErrorMsg("Não foi possível carregar os dados do tempo.");
-        setCurrentContext(null, null);
       } finally {
         setLoading(false);
       }
     };
-    fetchWeatherData();
-  }, [
-    user,
-    selectedCityId,
-    drawerLocationId,
-    setCurrentContext,
-    homeScreenRefreshToggle,
-  ]);
 
-  // --- Funções de Callback ---
-  const handleSelectCity = (cityId: string, cityName: string) => {
-    // 7. CORREÇÃO: (Corrige o erro 'Argument of type...')
+    fetchWeatherData();
+  }, [user, selectedCityId, drawerLocation, homeScreenRefreshToggle]);
+
+  const handleSelectCity = (id: string, name: string) => {
     navigation.setParams({ location: undefined });
-    setSelectedCityId(cityId);
-    setOverrideDisplayName(cityName);
+    setSelectedCityId(id);
+    setOverrideDisplayName(name);
     setModalVisible(false);
   };
+
   const handleUseGps = () => {
-    // 7. CORREÇÃO: (Corrige o erro 'Argument of type...')
     navigation.setParams({ location: undefined });
     setSelectedCityId(null);
     setOverrideDisplayName(null);
     setModalVisible(false);
   };
 
-  // --- Renderização de Carregamento/Erro (sem mudança) ---
-  if (loading && !currentWeather) {
+  const todayAstro =
+    forecast.length > 0 && forecast[0].astro
+      ? forecast[0].astro
+      : { sunrise: "--:--", sunset: "--:--" };
+
+  if (loading) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>Carregando localização...</Text>
+        <Text style={styles.loadingText}>Atualizando dados...</Text>
       </View>
     );
   }
@@ -228,13 +375,16 @@ export function HomeScreen() {
   if (errorMsg) {
     return (
       <View style={styles.centerContainer}>
+        <MaterialIcons name="cloud-off" size={48} color="#ccc" />
         <Text style={styles.errorText}>{errorMsg}</Text>
         <TouchableOpacity
           onPress={() => {
-            setErrorMsg(null);
-            setSelectedCityId(selectedCityId ? selectedCityId : null);
-            if (drawerLocation)
+            if (!drawerLocation) setSelectedCityId(null);
+            if (drawerLocation) {
               navigation.setParams({ location: drawerLocation });
+            } else {
+              handleUseGps();
+            }
           }}
         >
           <Text style={styles.retryText}>Tentar Novamente</Text>
@@ -243,89 +393,130 @@ export function HomeScreen() {
     );
   }
 
-  // --- Renderização Principal ---
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <MaterialIcons name="cloud-off" size={20} color="#fff" />
+          <Text style={styles.offlineText}>
+            Modo Offline •{" "}
+            {lastUpdate ? `Salvo às ${lastUpdate}` : "Dados Antigos"}
+          </Text>
+        </View>
+      )}
+
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 40 }}
+      >
         <View style={styles.header}>
-          {/* 8. CORREÇÃO: 'openDrawer' não existe, usamos 'dispatch' */}
           <TouchableOpacity
             onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+            style={styles.headerSide}
           >
             <FontAwesome5 name="bars" size={24} color="#333" />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => setModalVisible(true)}>
-            <Text style={styles.locationTitle} numberOfLines={1}>
-              {overrideDisplayName
-                ? overrideDisplayName
-                : currentWeather
-                ? `${currentWeather.name}, ${currentWeather.country}`
-                : "Carregando..."}
-            </Text>
+          <TouchableOpacity
+            onPress={() => setModalVisible(true)}
+            style={styles.titleButton}
+          >
+            <View style={{ alignItems: "center" }}>
+              <Text style={styles.locationTitle} numberOfLines={1}>
+                {mainTitle}
+              </Text>
+              {subTitle && <Text style={styles.subtitleText}>{subTitle}</Text>}
+            </View>
+            <FontAwesome5
+              name="caret-down"
+              size={14}
+              color="#666"
+              style={{ marginLeft: 6, marginTop: 2 }}
+            />
           </TouchableOpacity>
-          <View style={{ width: 24 }} />
+
+          <TouchableOpacity
+            onPress={handleShare}
+            style={styles.headerSide}
+            disabled={isSharing}
+          >
+            {isSharing ? (
+              <ActivityIndicator color="#3b82f6" />
+            ) : (
+              <Feather name="share" size={24} color="#333" />
+            )}
+          </TouchableOpacity>
         </View>
 
-        {loading && (
-          <ActivityIndicator style={styles.inlineLoading} color="#3b82f6" />
-        )}
-
-        {currentWeather && (
-          <View style={styles.currentWeatherContainer}>
-            <Image
-              source={{ uri: `https:${currentWeather.condition.icon}` }}
-              style={styles.weatherIcon}
-            />
-            <Text style={styles.temperature}>
-              {Math.round(currentWeather.temp)}°{" "}
-              {currentWeather.tempUnit.toUpperCase()}
-            </Text>
-
-            <View style={styles.detailsContainer}>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Velo. vento:</Text>
-                <Text style={styles.detailValue}>
-                  {currentWeather.wind} {currentWeather.speedUnit}
-                </Text>
-              </View>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Humidade do ar:</Text>
-                <Text style={styles.detailValue}>
-                  {currentWeather.humidity}%
-                </Text>
-              </View>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Sensação térmica:</Text>
-                <Text style={styles.detailValue}>
-                  {Math.round(currentWeather.sensacao_termica!)}°{" "}
-                  {currentWeather.tempUnit.toUpperCase()}
-                </Text>
-              </View>
+        <ViewShot
+          ref={viewShotRef}
+          options={{ format: "png", quality: 0.9 }}
+          style={{ backgroundColor: "#fff" }}
+        >
+          {currentWeather && (
+            <View style={styles.mainInfo}>
+              <Image
+                source={{ uri: `https:${currentWeather.condition.icon}` }}
+                style={styles.icon}
+              />
+              <Text style={styles.temp}>
+                {Math.round(currentWeather.temp)}°{currentWeather.tempUnit}
+              </Text>
+              <Text style={styles.condition}>
+                {currentWeather.condition.text}
+              </Text>
+              <Text style={styles.feelsLike}>
+                Sensação: {Math.round(currentWeather.feelslike)}°
+              </Text>
             </View>
-          </View>
-        )}
+          )}
+        </ViewShot>
 
-        <View style={styles.forecastContainer}>
-          <Text style={styles.forecastTitle}>Próximos 7 dias</Text>
+        <View style={styles.forecastSection}>
+          <Text style={styles.sectionTitle}>Próximos Dias</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {forecast.map((day, index) => (
-              <View style={styles.forecastItem} key={index}>
+            {forecast.map((day, idx) => (
+              <View key={idx} style={styles.forecastCard}>
                 <Text style={styles.forecastDay}>{day.day_of_week}</Text>
                 <Image
                   source={{ uri: `https:${day.condition.icon}` }}
                   style={styles.forecastIcon}
                 />
-                <Text style={styles.forecastTemp}>
+                <Text style={styles.forecastValue}>
                   {Math.round(parseFloat(day.avgtemp))}°
                 </Text>
               </View>
             ))}
           </ScrollView>
         </View>
-      </ScrollView>
 
-      {/* 9. A 'View' 'bottomNav' foi REMOVIDA daqui */}
+        {currentWeather && !isSimplifiedMode && (
+          <>
+            <View style={styles.detailsHeader}>
+              <Text style={styles.sectionTitle}>Detalhes do Clima</Text>
+              <TouchableOpacity onPress={() => setCustomizeModalVisible(true)}>
+                <Feather name="plus-circle" size={24} color="#3b82f6" />
+              </TouchableOpacity>
+            </View>
+
+            <AdvancedInfo
+              uv={currentWeather.uv}
+              pressure={currentWeather.pressure_mb}
+              co={currentWeather.co}
+              humidity={currentWeather.humidity}
+              windSpeed={currentWeather.wind}
+              windUnit={currentWeather.speedUnit}
+              windDir={currentWeather.wind_dir}
+              rainProb={currentWeather.chance_of_rain || 0}
+              dewPoint={currentWeather.dewpoint}
+              sunrise={todayAstro.sunrise}
+              sunset={todayAstro.sunset}
+              visibility={advancedVisibility}
+              airQualityObj={currentWeather.air_quality_full}
+            />
+          </>
+        )}
+      </ScrollView>
 
       <SearchModal
         visible={modalVisible}
@@ -333,136 +524,100 @@ export function HomeScreen() {
         onSelectCity={handleSelectCity}
         onUseGps={handleUseGps}
       />
+
+      <CustomizeDetailsModal
+        visible={customizeModalVisible}
+        onClose={() => setCustomizeModalVisible(false)}
+        currentConfig={advancedVisibility}
+        onSave={handleSaveVisibility}
+      />
     </SafeAreaView>
   );
 }
 
-// --- ESTILOS COM AJUSTE DE ALINHAMENTO ---
 const styles = StyleSheet.create({
-  safeArea: {
+  safeArea: { flex: 1, backgroundColor: "#fff" },
+  container: { padding: 20 },
+  centerContainer: {
     flex: 1,
-    backgroundColor: "#fff",
-  },
-  container: {
-    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
-    paddingTop: 50,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 20,
+    marginTop: 10,
+  },
+  headerSide: {
+    width: 50,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  titleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
   },
   locationTitle: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#333",
-    paddingHorizontal: 10,
-    flexShrink: 1,
+    textAlign: "center",
   },
-  inlineLoading: {
-    marginVertical: 10,
+  subtitleText: { fontSize: 14, color: "#666", fontWeight: "500" },
+  mainInfo: { alignItems: "center", marginBottom: 30 },
+  icon: { width: 120, height: 120 },
+  temp: { fontSize: 72, fontWeight: "bold", color: "#333" },
+  condition: { fontSize: 20, color: "#666", marginBottom: 5 },
+  feelsLike: { fontSize: 16, color: "#888" },
+  forecastSection: { marginBottom: 10 },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 10,
+    color: "#333",
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: "center",
+  forecastCard: {
+    backgroundColor: "#3b82f6",
+    borderRadius: 12,
+    padding: 12,
     alignItems: "center",
-    backgroundColor: "#fff",
-    padding: 20,
+    marginRight: 10,
+    width: 90,
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#555",
-  },
+  forecastDay: { color: "#fff", fontSize: 14, fontWeight: "bold" },
+  forecastIcon: { width: 40, height: 40, marginVertical: 5 },
+  forecastValue: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  loadingText: { marginTop: 10, color: "#666" },
   errorText: {
     fontSize: 16,
     color: "#D8000C",
+    marginBottom: 20,
     textAlign: "center",
   },
-  retryText: {
-    fontSize: 16,
-    color: "#3b82f6",
-    marginTop: 10,
-    fontWeight: "bold",
-  },
-  currentWeatherContainer: {
-    alignItems: "center",
-    marginBottom: 30,
-    marginTop: 40, // <-- AJUSTE AQUI: Adiciona espaço acima do ícone
-  },
-  weatherIcon: {
-    width: 200,
-    height: 200,
-    resizeMode: "contain",
-  },
-  temperature: {
-    fontSize: 88,
-    fontWeight: "bold",
-    color: "#333",
-    marginTop: -20,
-  },
-  detailsContainer: {
+  retryText: { color: "#3b82f6", fontWeight: "bold", fontSize: 16 },
+  offlineBanner: {
+    backgroundColor: "#F59E0B",
+    padding: 10,
     flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
-    marginTop: 20,
-  },
-  detailItem: {
-    alignItems: "center",
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: "#555",
-  },
-  detailValue: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  forecastContainer: {
-    marginBottom: 20,
-  },
-  forecastTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 10,
-  },
-  forecastItem: {
-    backgroundColor: "#000",
-    borderRadius: 10,
-    padding: 15,
-    alignItems: "center",
-    marginRight: 10,
-    width: 100,
-  },
-  forecastDay: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  forecastIcon: {
-    width: 50,
-    height: 50,
-    marginVertical: 5,
-  },
-  forecastTemp: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  bottomNav: {
-    flexDirection: "row",
-    height: 70,
-    borderTopWidth: 1,
-    borderTopColor: "#eee",
-    backgroundColor: "#fff",
-  },
-  navButton: {
-    flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    marginTop: Platform.OS === "android" ? 30 : 0,
+  },
+  offlineText: {
+    color: "#fff",
+    fontWeight: "bold",
+    marginLeft: 8,
+    fontSize: 14,
+  },
+  detailsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
   },
 });

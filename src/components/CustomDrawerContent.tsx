@@ -1,13 +1,10 @@
-// src/components/CustomDrawerContent.tsx
 import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   ActivityIndicator,
-  Image,
   Alert,
 } from "react-native";
 import {
@@ -20,6 +17,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { useWeather } from "../contexts/WeatherContext";
 import api from "../services/api";
 
+import { useWeatherCache } from "../hooks/useWeatherCache";
+
 import { SettingsModal } from "./SettingsModal";
 import { AddLocationModal } from "./AddLocationModal";
 import { LocationWeatherItem } from "./LocationWeatherItem";
@@ -27,15 +26,18 @@ import { ManageLocationModal } from "./ManageLocationModal";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { AlertsModal } from "./AlertsModal";
 
-// 1. IMPORTAR O TIPO DO index.tsx
+import { NotificationsModal } from "./NotificationsModal";
+
 import { UserLocation } from "../navigation";
 
 export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const { navigation } = props;
   const { user, signOut } = useAuth();
-
-  // 2. CORREÇÃO: Usar 'currentLocationCoords' do WeatherContext
   const { currentLocationCoords, triggerHomeRefresh } = useWeather();
+
+  const { saveLocationsList, loadLocationsList, saveWeatherToCache } =
+    useWeatherCache();
+
   const isDrawerOpen = useDrawerStatus() === "open";
 
   const [locations, setLocations] = useState<UserLocation[]>([]);
@@ -43,7 +45,6 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [refreshToggle, setRefreshToggle] = useState(false);
 
-  // --- Estados dos Modais ---
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [manageModalVisible, setManageModalVisible] = useState(false);
@@ -54,20 +55,61 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [alertsModalVisible, setAlertsModalVisible] = useState(false);
 
-  // --- Funções: fetchLocations, useEffect ---
+  const [notificationsModalVisible, setNotificationsModalVisible] =
+    useState(false);
+
   const fetchLocations = useCallback(async () => {
     if (user) {
+      const currentUserId = user.id;
+
       setLoadingList(true);
       try {
-        const response = await api.get(`/users/${user.id}/locations`);
-        setLocations(response.data);
+        const response = await api.get(`/users/${currentUserId}/locations`);
+        const list = response.data;
+
+        setLocations(list);
+        setLoadingList(false);
+
+        await saveLocationsList(list);
+
+        console.log("🔄 Iniciando sincronização em massa...");
+
+        list.forEach(async (loc: UserLocation) => {
+          try {
+            const [weatherRes, forecastRes] = await Promise.all([
+              api.get("/api/weather/data", {
+                params: { id: loc.id, userId: currentUserId },
+              }),
+              api.get("/api/forecast/data", {
+                params: { id: loc.id, userId: currentUserId },
+              }),
+            ]);
+
+            await saveWeatherToCache(
+              loc.id,
+              weatherRes.data,
+              forecastRes.data,
+              {
+                id: loc.id,
+                name: loc.name,
+                lat: loc.latitude,
+                long: loc.longitude,
+              }
+            );
+          } catch (syncErr) {
+            console.log(`❌ Falha ao sincronizar background para ${loc.name}`);
+          }
+        });
       } catch (err) {
-        console.error("Falha ao buscar locais salvos:", err);
-      } finally {
+        console.error("Falha ao buscar locais (API). Tentando cache...");
+        const cachedList = await loadLocationsList();
+        if (cachedList && cachedList.length > 0) {
+          setLocations(cachedList);
+        }
         setLoadingList(false);
       }
     }
-  }, [user]);
+  }, [user, saveLocationsList, loadLocationsList, saveWeatherToCache]);
 
   useEffect(() => {
     if (isDrawerOpen) {
@@ -75,9 +117,6 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
     }
   }, [isDrawerOpen, fetchLocations]);
 
-  // --- Funções de Ação ---
-
-  // 3. CORREÇÃO: Navega para o TabNavigator aninhado
   const handleLocationPress = (location: UserLocation) => {
     navigation.navigate("MainTabs", {
       screen: "Home",
@@ -85,7 +124,6 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
     });
   };
 
-  // 4. CORREÇÃO: Verifica 'currentLocationCoords'
   const handleOpenAddModal = () => {
     if (currentLocationCoords) {
       setAddModalVisible(true);
@@ -98,12 +136,10 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   };
 
   const handleSaveLocation = async (name: string) => {
-    // 5. CORREÇÃO: Pega lat/long de 'currentLocationCoords'
     if (!user || !currentLocationCoords) return;
     setIsSaving(true);
     try {
       const { latitude, longitude } = currentLocationCoords;
-      // 1. Salva o novo local
       const response = await api.post(`/users/${user.id}/locations`, {
         name,
         latitude: String(latitude),
@@ -111,13 +147,11 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
       });
 
       const newLocationId = response.data.id;
-
-      // 2. Força a atualização do cache
       await api.post(`/locations/${newLocationId}/refresh`);
 
       setAddModalVisible(false);
       Alert.alert("Sucesso!", `"${name}" foi salvo.`);
-      fetchLocations(); // Atualiza a lista de locais
+      fetchLocations();
     } catch (err) {
       Alert.alert("Erro", "Não foi possível salvar este local.");
       console.error(err);
@@ -150,8 +184,6 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
     }
   };
 
-  // --- Funções de Gerenciamento ---
-
   const handleOpenManageModal = (location: UserLocation) => {
     setSelectedLocation(location);
     setManageModalVisible(true);
@@ -172,12 +204,11 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
 
     setIsDeleting(true);
     try {
-      // Chama a API de DELETE
       await api.delete(`/locations/${selectedLocation.id}`);
       Alert.alert("Sucesso!", `"${selectedLocation.name}" foi deletado.`);
       setDeleteModalVisible(false);
       setSelectedLocation(null);
-      fetchLocations(); // Atualiza a lista
+      fetchLocations();
     } catch (err) {
       Alert.alert("Erro", "Não foi possível deletar o local.");
     } finally {
@@ -188,11 +219,12 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   return (
     <View style={styles.container}>
       <DrawerContentScrollView {...props} style={styles.scrollView}>
-        {/* Header da Gaveta */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Locais Salvos</Text>
           <View style={styles.headerIcons}>
-            <TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setNotificationsModalVisible(true)}
+            >
               <Ionicons name="notifications-outline" size={24} color="#333" />
             </TouchableOpacity>
 
@@ -206,30 +238,26 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           </View>
         </View>
 
-        {/* Lista de Locais Salvos */}
-        {loadingList && (
+        {loadingList && locations.length === 0 && (
           <ActivityIndicator style={{ margin: 20 }} color="#3b82f6" />
         )}
 
-        {!loadingList &&
-          user &&
-          locations.map((loc) => (
-            <LocationWeatherItem
-              key={loc.id}
-              id={loc.id}
-              name={loc.name}
-              latitude={loc.latitude}
-              longitude={loc.longitude}
-              onPress={() => handleLocationPress(loc)}
-              onLongPress={() => handleOpenManageModal(loc)}
-              isDrawerOpen={isDrawerOpen}
-              refreshToggle={refreshToggle}
-              userId={user.id}
-            />
-          ))}
+        {locations.map((loc) => (
+          <LocationWeatherItem
+            key={loc.id}
+            id={loc.id}
+            name={loc.name}
+            latitude={loc.latitude}
+            longitude={loc.longitude}
+            onPress={() => handleLocationPress(loc)}
+            onLongPress={() => handleOpenManageModal(loc)}
+            isDrawerOpen={isDrawerOpen}
+            refreshToggle={refreshToggle}
+            userId={user ? user.id : ""}
+          />
+        ))}
       </DrawerContentScrollView>
 
-      {/* Rodapé (Logout) */}
       <View style={styles.footer}>
         <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
           <Ionicons name="log-out-outline" size={24} color="#D8000C" />
@@ -237,7 +265,6 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
         </TouchableOpacity>
       </View>
 
-      {/* Modais */}
       <SettingsModal
         visible={settingsModalVisible}
         onClose={() => setSettingsModalVisible(false)}
@@ -267,13 +294,15 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
         onClose={() => setAlertsModalVisible(false)}
         locationId={selectedLocation?.id || null}
       />
+
+      <NotificationsModal
+        visible={notificationsModalVisible}
+        onClose={() => setNotificationsModalVisible(false)}
+      />
     </View>
   );
 }
 
-// --- Estilos ---
-// ATUALIZAÇÃO: Os estilos do 'locationItem' foram removidos
-// pois agora estão no componente LocationWeatherItem.tsx
 const styles = StyleSheet.create({
   container: {
     flex: 1,

@@ -1,4 +1,3 @@
-// src/screens/LoginScreen.tsx
 import React, { useState } from "react";
 import {
   View,
@@ -11,20 +10,19 @@ import {
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
   Platform,
-  Modal, // 1. Importar Modal
-  ActivityIndicator, // 2. Importar ActivityIndicator
+  Modal,
+  ActivityIndicator,
   SafeAreaView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { FontAwesome } from "@expo/vector-icons";
-import { WebView } from "react-native-webview"; // 3. Importar WebView
+import { WebView } from "react-native-webview";
 
 import { StyledInput } from "../components/StyledInput";
 import { StyledButton } from "../components/StyledButton";
 import { useAuth } from "../contexts/AuthContext";
-import { generateCodeVerifier } from "../services/pkce"; // 4. Importar do pkce.ts
+import { generateCodeVerifier } from "../services/pkce";
 
-// 5. Pegar as variáveis do process.env
 const CLIENT_ID = process.env.EXPO_PUBLIC_TWITTER_CLIENT_ID;
 const CALLBACK_URL = process.env.EXPO_PUBLIC_TWITTER_CALLBACK_URL;
 
@@ -36,7 +34,6 @@ export function LoginScreen() {
   const { signInEmail, signInWithTwitter } = useAuth();
   const navigation = useNavigation<any>();
 
-  // --- Lógica de Login Email/Senha (sem mudança) ---
   const handleLoginEmail = async () => {
     if (!email || !password) {
       Alert.alert("Erro", "Por favor, preencha e-mail e senha.");
@@ -54,7 +51,6 @@ export function LoginScreen() {
     }
   };
 
-  // --- Lógica de Login Twitter (adaptada do paginalogin.tsx) ---
   const [showWebView, setShowWebView] = useState(false);
   const [twitterAuthUrl, setTwitterAuthUrl] = useState("");
   const [codeVerifier, setCodeVerifier] = useState("");
@@ -69,14 +65,13 @@ export function LoginScreen() {
       return;
     }
 
-    const verifier = generateCodeVerifier(); //
+    const verifier = generateCodeVerifier();
     setCodeVerifier(verifier);
 
-    const challenge = verifier; // Para o método 'plain'
+    const challenge = verifier;
     const scope = "users.read tweet.read offline.access";
-    const state = Math.random().toString(36).substring(2); // State aleatório
+    const state = Math.random().toString(36).substring(2);
 
-    // Monta a URL exatamente como no paginalogin.tsx
     const url = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
       CALLBACK_URL
     )}&scope=${encodeURIComponent(
@@ -87,13 +82,11 @@ export function LoginScreen() {
     setShowWebView(true);
   };
 
-  // "Escuta" o WebView
   const handleNavigationStateChange = async (navState: any) => {
     const { url } = navState;
 
-    // Verifica se a URL é a nossa URL de callback do backend
     if (url.startsWith(CALLBACK_URL)) {
-      const codeMatch = url.match(/code=([^&]+)/); // Pega o 'code' da URL
+      const codeMatch = url.match(/code=([^&]+)/);
 
       if (codeMatch) {
         const code = codeMatch[1];
@@ -101,8 +94,6 @@ export function LoginScreen() {
         setLoadingSocial(true);
 
         try {
-          // Usa nosso AuthContext para finalizar o login.
-          // Ele já sabe como chamar /auth/twitter/callback
           await signInWithTwitter(code, codeVerifier);
         } catch (err: any) {
           console.error(err.response?.data || err.message);
@@ -114,7 +105,6 @@ export function LoginScreen() {
     }
   };
 
-  // Se showWebView for true, renderiza o Modal com o WebView
   if (showWebView) {
     return (
       <Modal
@@ -134,7 +124,6 @@ export function LoginScreen() {
     );
   }
 
-  // --- Renderização Principal (sem mudança) ---
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -150,7 +139,6 @@ export function LoginScreen() {
             />
           )}
 
-          {/* Logo */}
           <Image
             source={require("../assets/logo-weather.png")}
             style={styles.logo}
@@ -158,7 +146,6 @@ export function LoginScreen() {
 
           <Text style={styles.title}>Bem vindo de volta!</Text>
 
-          {/* Formulário de Email */}
           <StyledInput
             placeholder="Seu e-mail"
             value={email}
@@ -179,10 +166,8 @@ export function LoginScreen() {
             loading={loadingEmail}
           />
 
-          {/* Divisor */}
           <Text style={styles.separatorText}>Ou logue com</Text>
 
-          {/* Botões Sociais */}
           <View style={styles.socialContainer}>
             <TouchableOpacity style={styles.socialButton}>
               <FontAwesome name="google" size={24} color="#DB4437" />
@@ -192,14 +177,13 @@ export function LoginScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.socialButton}
-              onPress={handleTwitterLogin} // 6. Chama nossa nova função
+              onPress={handleTwitterLogin}
               disabled={loadingSocial}
             >
               <FontAwesome name="twitter" size={24} color="#1DA1F2" />
             </TouchableOpacity>
           </View>
 
-          {/* Link de Cadastro */}
           <TouchableOpacity onPress={() => navigation.navigate("Cadastro")}>
             <Text style={styles.signupText}>
               Não tem conta? <Text style={styles.signupLink}>Cadastre-se</Text>
@@ -211,7 +195,6 @@ export function LoginScreen() {
   );
 }
 
-// 7. Adicionar o estilo do loading
 const styles = StyleSheet.create({
   container: {
     flex: 1,

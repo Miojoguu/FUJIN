@@ -1,4 +1,3 @@
-// src/components/DeleteConfirmModal.tsx
 import React from "react";
 import {
   View,
@@ -71,7 +70,6 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
   );
 };
 
-// --- Estilos ---
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
@@ -122,7 +120,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   footerButtonPrimary: {
-    backgroundColor: "#3b82f6", // No protótipo é azul
+    backgroundColor: "#3b82f6",
     borderColor: "#3b82f6",
   },
   footerButtonPrimaryText: {

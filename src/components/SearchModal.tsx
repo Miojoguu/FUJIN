@@ -1,4 +1,3 @@
-// src/components/SearchModal.tsx
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -15,7 +14,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
 
-// --- Tipagem ---
 interface SearchResult {
   id: string;
   name: string;
@@ -24,36 +22,31 @@ interface SearchResult {
 interface SearchModalProps {
   visible: boolean;
   onClose: () => void;
-  // Envia o ID e o Nome da cidade selecionada
+
   onSelectCity: (cityId: string, cityName: string) => void;
   onUseGps: () => void;
 }
 
-// --- Componente ---
 export const SearchModal: React.FC<SearchModalProps> = ({
   visible,
   onClose,
   onSelectCity,
   onUseGps,
 }) => {
-  // --- Estados Internos do Modal ---
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // --- Efeito de Debounce da Busca ---
   useEffect(() => {
-    // Limpa os resultados se a busca estiver vazia
     if (searchQuery.trim() === "") {
       setSearchResults([]);
       return;
     }
 
     setIsLoading(true);
-    // Configura o timer
+
     const searchTimer = setTimeout(async () => {
       try {
-        // Chama a rota de autocomplete (ex: /api/londres)
         const response = await api.get(`/api/${searchQuery}`);
         setSearchResults(response.data);
       } catch (error) {
@@ -62,27 +55,25 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       } finally {
         setIsLoading(false);
       }
-    }, 500); // 500ms de debounce
+    }, 500);
 
-    // Função de limpeza: cancela o timer se o usuário digitar novamente
     return () => clearTimeout(searchTimer);
   }, [searchQuery]);
 
-  // --- Funções Helper ---
   const handleSelect = (cityId: string, cityName: string) => {
-    onSelectCity(cityId, cityName); // Chama a função do pai com ambos os valores
+    onSelectCity(cityId, cityName);
     handleClose();
   };
 
   const handleUseGps = () => {
-    onUseGps(); // Chama a função do pai
+    onUseGps();
     handleClose();
   };
 
   const handleClose = () => {
-    setSearchQuery(""); // Limpa a busca ao fechar
-    setSearchResults([]); // Limpa os resultados ao fechar
-    onClose(); // Chama a função do pai para fechar o modal
+    setSearchQuery("");
+    setSearchResults([]);
+    onClose();
   };
 
   return (
@@ -98,7 +89,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
             <View style={styles.modalContainer}>
               <Text style={styles.modalTitle}>Buscar Localização</Text>
 
-              {/* Botão para voltar ao GPS */}
               <TouchableOpacity style={styles.gpsButton} onPress={handleUseGps}>
                 <Ionicons
                   name="navigate-circle-outline"
@@ -110,7 +100,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                 </Text>
               </TouchableOpacity>
 
-              {/* Input de Busca */}
               <TextInput
                 style={styles.searchInput}
                 placeholder="Digite o nome da cidade..."
@@ -119,7 +108,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                 onChangeText={setSearchQuery}
               />
 
-              {/* Lista de Resultados */}
               {isLoading && <ActivityIndicator color="#3b82f6" />}
               <FlatList
                 data={searchResults}
@@ -148,7 +136,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   );
 };
 
-// --- Estilos ---
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
@@ -160,7 +147,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    maxHeight: "80%", // Limita a altura
+    maxHeight: "80%",
   },
   modalTitle: {
     fontSize: 20,

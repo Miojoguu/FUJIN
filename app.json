@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "FUJIN",
-    "slug": "FUJIN",
+    "name": "fujin",
+    "slug": "fujin",
     "scheme": "fujin",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -23,16 +23,26 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.miongos.FUJIN",
+      "package": "com.miojo.fujin",
       "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-web-browser"],
+    "plugins": [
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon.png",
+          "color": "#ffffff"
+        }
+      ]
+    ],
+    "owner": "miongos",
     "extra": {
       "eas": {
-        "projectId": "3968823b-c8f4-4093-bf11-1a624358c03b"
+        "projectId": "f696848f-0b40-491c-9862-eed49599ed4c"
       }
     }
   }

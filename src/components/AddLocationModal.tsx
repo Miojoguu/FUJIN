@@ -1,4 +1,3 @@
-// src/components/AddLocationModal.tsx
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -10,12 +9,12 @@ import {
   Keyboard,
   Alert,
 } from "react-native";
-import { StyledInput } from "./StyledInput"; // Reutilizando nosso input
+import { StyledInput } from "./StyledInput";
 
 interface AddLocationModalProps {
   visible: boolean;
   onClose: () => void;
-  // Função que será chamada com o nome que o usuário digitou
+
   onSave: (name: string) => void;
   isLoading: boolean;
 }
@@ -28,7 +27,6 @@ export const AddLocationModal: React.FC<AddLocationModalProps> = ({
 }) => {
   const [name, setName] = useState("");
 
-  // Limpa o nome quando o modal é fechado
   useEffect(() => {
     if (!visible) {
       setName("");
@@ -56,7 +54,6 @@ export const AddLocationModal: React.FC<AddLocationModalProps> = ({
             <View style={styles.modalContainer}>
               <Text style={styles.modalTitle}>Nome do Local</Text>
 
-              {/* Input para o Nome */}
               <StyledInput
                 placeholder="Ex: Casa, Trabalho..."
                 value={name}
@@ -64,7 +61,6 @@ export const AddLocationModal: React.FC<AddLocationModalProps> = ({
                 autoCapitalize="words"
               />
 
-              {/* Botões de Ação */}
               <View style={styles.footerRow}>
                 <TouchableOpacity
                   style={[styles.footerButton, styles.footerButtonSecondary]}
@@ -91,7 +87,6 @@ export const AddLocationModal: React.FC<AddLocationModalProps> = ({
   );
 };
 
-// --- Estilos (baseados no SettingsModal) ---
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,

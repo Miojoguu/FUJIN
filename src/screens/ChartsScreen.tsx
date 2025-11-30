@@ -1,4 +1,3 @@
-// src/screens/ChartsScreen.tsx
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -7,13 +6,16 @@ import {
   ActivityIndicator,
   Dimensions,
   SafeAreaView,
+  TouchableOpacity,
 } from "react-native";
 import { LineChart } from "react-native-chart-kit";
 import { useIsFocused } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { useWeather } from "../contexts/WeatherContext";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
+import { HistoryModal } from "../components/HistoryModal";
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -31,7 +33,7 @@ const chartConfig = {
   backgroundGradientFrom: "#ffffff",
   backgroundGradientTo: "#ffffff",
   decimalPlaces: 0,
-  color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`, // Azul
+  color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
   labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
   style: {
     borderRadius: 16,
@@ -45,44 +47,53 @@ const chartConfig = {
 
 export function ChartsScreen() {
   const { user } = useAuth();
-  const { currentLocationId } = useWeather();
-  const isFocused = useIsFocused(); // Hook para saber se a aba está visível
+  const { currentLocationId, currentLocationCoords } = useWeather();
+  const isFocused = useIsFocused();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chartData, setChartData] = useState<ChartData | null>(null);
 
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const [locationName, setLocationName] = useState("Localização Atual");
+
   useEffect(() => {
-    if (!isFocused || !user) {
-      return;
-    }
+    if (!isFocused || !user) return;
 
     const fetchChartData = async () => {
       setLoading(true);
       setError(null);
       setChartData(null);
 
-      if (!currentLocationId) {
-        setError(
-          "Gráficos detalhados estão disponíveis apenas para locais salvos."
-        );
+      if (!currentLocationId && !currentLocationCoords) {
+        setError("Nenhuma localização selecionada.");
         setLoading(false);
         return;
       }
 
       try {
-        const response = await api.get(
-          `/locations/${currentLocationId}/weather`,
-          {
-            params: { userId: user.id },
-          }
-        );
+        let response;
 
-        const hourlyData = response.data.forecasts?.[0]?.hourlyData;
+        if (currentLocationId) {
+          response = await api.get(`/locations/${currentLocationId}/weather`, {
+            params: { userId: user.id },
+          });
+        } else if (currentLocationCoords) {
+          response = await api.get(`/api/weather/latlong`, {
+            params: {
+              lat: currentLocationCoords.latitude,
+              long: currentLocationCoords.longitude,
+              userId: user.id,
+            },
+          });
+        }
+
+        if (response?.data.name) setLocationName(response.data.name);
+
+        const hourlyData = response?.data.forecasts?.[0]?.hourlyData;
+
         if (!hourlyData || hourlyData.length === 0) {
-          setError("Não há dados horários para este local.");
-          setLoading(false);
-          return;
+          throw { response: { status: 404 } };
         }
 
         const labels: string[] = [];
@@ -90,7 +101,6 @@ export function ChartsScreen() {
 
         hourlyData.forEach((hour: any, index: number) => {
           if (index % 3 === 0) {
-            // Pega de 3 em 3 horas
             labels.push(new Date(hour.time).getHours() + "h");
             data.push(Math.round(hour.temp));
           }
@@ -100,37 +110,53 @@ export function ChartsScreen() {
           labels,
           datasets: [{ data }],
         });
-      } catch (err) {
-        console.error("Falha ao buscar dados do gráfico:", err);
-        setError("Não foi possível carregar o gráfico.");
+      } catch (err: any) {
+        if (err.response && err.response.status === 404) {
+          setError(
+            "Gráficos detalhados estão disponíveis apenas para locais salvos no menu lateral."
+          );
+        } else {
+          console.error("Falha ao buscar dados do gráfico:", err);
+          setError("Não foi possível carregar o gráfico.");
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchChartData();
-  }, [currentLocationId, isFocused, user]);
+  }, [currentLocationId, currentLocationCoords, isFocused, user]);
+
+  if (!isFocused) {
+    return <View style={styles.safeArea} />;
+  }
 
   const renderContent = () => {
-    if (loading) {
-      return <ActivityIndicator size="large" color="#3b82f6" />;
-    }
-    if (error) {
-      return <Text style={styles.messageText}>{error}</Text>;
-    }
+    if (loading) return <ActivityIndicator size="large" color="#3b82f6" />;
+
+    if (error) return <Text style={styles.messageText}>{error}</Text>;
+
     if (chartData) {
       return (
         <>
-          <Text style={styles.chartTitle}>Variação da Temperatura</Text>
+          <Text style={styles.chartTitle}>Variação da Temperatura (Hoje)</Text>
           <LineChart
             data={chartData}
-            width={screenWidth - 32} // Largura da tela com padding
-            height={250}
+            width={screenWidth - 32}
+            height={220}
             yAxisSuffix="°"
             chartConfig={chartConfig}
-            bezier // Curva suave
+            bezier
             style={styles.chart}
           />
+
+          <TouchableOpacity
+            style={styles.historyButton}
+            onPress={() => setHistoryVisible(true)}
+          >
+            <Ionicons name="time-outline" size={24} color="#fff" />
+            <Text style={styles.historyButtonText}>Explorar Histórico</Text>
+          </TouchableOpacity>
         </>
       );
     }
@@ -140,6 +166,14 @@ export function ChartsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>{renderContent()}</View>
+
+      <HistoryModal
+        visible={historyVisible}
+        onClose={() => setHistoryVisible(false)}
+        locationId={currentLocationId}
+        coords={currentLocationCoords}
+        locationName={locationName}
+      />
     </SafeAreaView>
   );
 }
@@ -160,6 +194,7 @@ const styles = StyleSheet.create({
     color: "#555",
     textAlign: "center",
     paddingHorizontal: 20,
+    lineHeight: 24,
   },
   chartTitle: {
     fontSize: 18,
@@ -170,5 +205,25 @@ const styles = StyleSheet.create({
   chart: {
     marginVertical: 8,
     borderRadius: 16,
+  },
+  historyButton: {
+    flexDirection: "row",
+    backgroundColor: "#3b82f6",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    alignItems: "center",
+    marginTop: 30,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  historyButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+    marginLeft: 10,
   },
 });

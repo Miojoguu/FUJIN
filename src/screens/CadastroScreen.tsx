@@ -1,4 +1,3 @@
-// src/screens/CadastroScreen.tsx
 import React, { useState } from "react";
 import {
   View,
@@ -35,8 +34,7 @@ export function CadastroScreen() {
     setLoading(true);
     try {
       await signUp(name, email, password);
-      // Se sucesso, o AuthProvider vai atualizar o estado
-      // e o navigator principal (em App.tsx) fará o resto.
+
     } catch (error: any) {
       const errorMsg =
         error.response?.data?.error || "Erro desconhecido. Tente novamente.";
@@ -53,15 +51,15 @@ export function CadastroScreen() {
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.innerContainer}>
-          {/* Logo */}
+
           <Image
-            source={require("../assets/logo-weather.png")} // Reutilizando a mesma imagem
+            source={require("../assets/logo-weather.png")} 
             style={styles.logo}
           />
 
           <Text style={styles.title}>Crie sua conta</Text>
 
-          {/* Formulário de Cadastro */}
+
           <StyledInput
             placeholder="Nome"
             value={name}
@@ -88,7 +86,7 @@ export function CadastroScreen() {
             loading={loading}
           />
 
-          {/* Link de Login */}
+ 
           <TouchableOpacity onPress={() => navigation.navigate("Login")}>
             <Text style={styles.loginText}>
               Já tem conta? <Text style={styles.loginLink}>Faça login</Text>
@@ -100,7 +98,7 @@ export function CadastroScreen() {
   );
 }
 
-// Reutilizando e adaptando os estilos do LoginScreen
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

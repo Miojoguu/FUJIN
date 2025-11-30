@@ -1,14 +1,9 @@
-// src/components/StyledInput.tsx
 import React from "react";
 import { TextInput, StyleSheet, TextInputProps } from "react-native";
 
 export const StyledInput: React.FC<TextInputProps> = (props) => {
   return (
-    <TextInput
-      style={styles.input}
-      placeholderTextColor="#888"
-      {...props}
-    />
+    <TextInput style={styles.input} placeholderTextColor="#888" {...props} />
   );
 };
 

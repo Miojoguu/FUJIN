@@ -1,4 +1,3 @@
-// src/components/ManageLocationModal.tsx
 import React from "react";
 import {
   View,
@@ -35,7 +34,6 @@ export const ManageLocationModal: React.FC<ManageLocationModalProps> = ({
             <View style={styles.modalContainer}>
               <Text style={styles.modalTitle}>Qual opção deseja?</Text>
 
-              {/* Botões de Ação */}
               <View style={styles.footerRow}>
                 <TouchableOpacity
                   style={[styles.footerButton, styles.footerButtonSecondary]}
@@ -58,7 +56,6 @@ export const ManageLocationModal: React.FC<ManageLocationModalProps> = ({
   );
 };
 
-// --- Estilos (baseados nos modais anteriores) ---
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,

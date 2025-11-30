@@ -1,4 +1,3 @@
-// src/components/AlertsModal.tsx
 import React, { useState } from "react";
 import {
   View,
@@ -12,13 +11,10 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker"; // 1. Importar o Picker
+import { Picker } from "@react-native-picker/picker";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
 
-// --- Tipagem (baseada no schema.prisma e no seu código) ---
-
-// 2. Usar as suas listas de opções
 const alertOptions = [
   { label: "Temperatura", value: "temperature" },
   { label: "Sensação Térmica", value: "feelsLike" },
@@ -52,7 +48,6 @@ export const AlertsModal: React.FC<AlertsModalProps> = ({
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
-  // 3. ATUALIZAR ESTADOS para usar os 'values'
   const [type, setType] = useState<string>("temperature");
   const [operator, setOperator] = useState<string>("GTE");
   const [threshold, setThreshold] = useState("30");
@@ -69,15 +64,13 @@ export const AlertsModal: React.FC<AlertsModalProps> = ({
     setIsLoading(true);
 
     try {
-      // 4. ATUALIZAR PAYLOAD (agora é direto, sem 'map')
       const payload = {
         locationId: locationId,
-        type: type, // ex: "temperature"
-        threshold: thresholdNum, // ex: 30
-        operator: operator, // ex: "GTE"
+        type: type,
+        threshold: thresholdNum,
+        operator: operator,
       };
 
-      // Chama a API de criação de alerta
       await api.post(`/users/${user.id}/alerts`, payload);
 
       Alert.alert("Sucesso", "Alerta criado!");
@@ -107,7 +100,6 @@ export const AlertsModal: React.FC<AlertsModalProps> = ({
                 <ActivityIndicator size="large" color="#3b82f6" />
               ) : (
                 <>
-                  {/* 5. SUBSTITUIR Botões por PICKER (Tipo) */}
                   <View style={styles.pickerContainer}>
                     <Picker
                       selectedValue={type}
@@ -124,7 +116,6 @@ export const AlertsModal: React.FC<AlertsModalProps> = ({
                     </Picker>
                   </View>
 
-                  {/* 6. SUBSTITUIR Botões por PICKER (Operador) */}
                   <View style={styles.pickerContainer}>
                     <Picker
                       selectedValue={operator}
@@ -141,7 +132,6 @@ export const AlertsModal: React.FC<AlertsModalProps> = ({
                     </Picker>
                   </View>
 
-                  {/* Linha 3: Valor (Threshold) (Sem mudança) */}
                   <TextInput
                     style={styles.textInput}
                     value={threshold}
@@ -151,7 +141,6 @@ export const AlertsModal: React.FC<AlertsModalProps> = ({
                     placeholderTextColor="#888"
                   />
 
-                  {/* Linha 4: Botões de Ação (Sem mudança) */}
                   <View style={styles.footerRow}>
                     <TouchableOpacity
                       style={[
@@ -183,7 +172,6 @@ export const AlertsModal: React.FC<AlertsModalProps> = ({
   );
 };
 
-// --- Estilos ---
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
@@ -204,7 +192,7 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 20,
   },
-  // 7. NOVO ESTILO para o container do Picker
+
   pickerContainer: {
     height: 50,
     width: "100%",

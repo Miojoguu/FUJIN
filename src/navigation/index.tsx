@@ -1,4 +1,3 @@
-// src/navigation/index.tsx
 import React from "react";
 import {
   NavigationContainer,
@@ -19,8 +18,8 @@ import { CadastroScreen } from "../screens/CadastroScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { CustomDrawerContent } from "../components/CustomDrawerContent";
 import { ChartsScreen } from "../screens/ChartsScreen";
+import { RadarScreen } from "../screens/RadarScreen";
 
-// --- Definição de Tipos ---
 export interface UserLocation {
   id: string;
   name: string;
@@ -35,11 +34,10 @@ export type AuthStackParamList = {
 
 export type AppTabParamList = {
   Home: { location?: UserLocation };
+  Radar: undefined;
   Charts: undefined;
 };
 
-// **A CORREÇÃO ESTÁ AQUI**
-// O Drawer agora contém o TabNavigator
 export type AppDrawerParamList = {
   MainTabs: NavigatorScreenParams<AppTabParamList>;
 };
@@ -47,8 +45,6 @@ export type AppDrawerParamList = {
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppDrawer = createDrawerNavigator<AppDrawerParamList>();
 const AppTab = createBottomTabNavigator<AppTabParamList>();
-
-// --- Componentes de Navegação ---
 
 function AuthNavigator() {
   return (
@@ -67,12 +63,16 @@ function MainTabNavigator() {
         tabBarActiveTintColor: "#3b82f6",
         tabBarInactiveTintColor: "#888",
         tabBarIcon: ({ color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap;
+          let iconName: keyof typeof Ionicons.glyphMap = "help-outline";
+
           if (route.name === "Home") {
             iconName = "globe-outline";
-          } else {
+          } else if (route.name === "Charts") {
             iconName = "stats-chart-outline";
+          } else if (route.name === "Radar") {
+            iconName = "map-outline";
           }
+
           return <Ionicons name={iconName} size={size} color={color} />;
         },
       })}
@@ -82,6 +82,13 @@ function MainTabNavigator() {
         component={HomeScreen}
         options={{ title: "Tempo" }}
       />
+
+      <AppTab.Screen
+        name="Radar"
+        component={RadarScreen}
+        options={{ title: "Radar" }}
+      />
+
       <AppTab.Screen
         name="Charts"
         component={ChartsScreen}
