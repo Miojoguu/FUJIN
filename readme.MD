@@ -74,6 +74,7 @@
 
 - Compartilhamento em redes sociais
 - Aba exclusiva para emergências
+- Implementação do RadarMap
 - Implementar uso offline (últimos dados salvos)
 - Integração com assistente virtual
 - Atualização automática em intervalos configuráveis
