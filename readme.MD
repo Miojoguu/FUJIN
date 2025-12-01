@@ -80,3 +80,10 @@
 - Atualização automática em intervalos configuráveis
 
 📋 **Objetivo da sprint:** Adicionar recursos avançados, personalização e integração com funcionalidades extras.
+
+# Aplicativo:
+## Link:
+https://expo.dev/accounts/miongos/projects/fujin/builds/c8f61adf-f874-4cb2-984b-0b1eb657af62
+
+## QRCODE:
+<img width="3000" height="3000" alt="frame" src="https://github.com/user-attachments/assets/5bfe95bd-b0a8-4835-a7e1-e829b986bc3b" />
